@@ -1,0 +1,201 @@
+---
+title: "scRNA_Analysis_part1"
+author: "Sai Ankith"
+date: "02/10/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(Seurat)
+library(ggplot2)
+library(RColorBrewer)
+set.seed(42)
+
+## working directory
+dir <- ''
+
+## data directory
+dir.data <- '/hdd_scratch1/sn829442/cell_ranger-pipeline/data/'
+
+## plot formatting options
+palette(brewer.pal(n=12, "Set3"))
+th <- theme_bw() + theme(
+  axis.text.x = element_text(size=11), 
+  axis.title.x = element_text(size=12), 
+  axis.text.y = element_text(size=11), 
+  axis.title.y = element_text(size=12), 
+  panel.grid.major = element_blank(), 
+  panel.grid.minor = element_blank(), 
+  axis.line = element_line(colour = "black"), 
+  panel.border = element_blank(), 
+  plot.title = element_text(face="bold", hjust = 0.5))
+
+```
+
+##Load data 
+```{r}
+load("output/seurat_obj_day1.RData")
+
+```
+
+## Quality checks
+
+```{r fig.width=8}
+
+DimPlot(seurat_obj, reduction = "tsne")
+
+```
+
+##Number of UMIs / Detected genes
+
+```{r fig.width=12, fig.height=5}
+
+FeaturePlot(seurat_obj, reduction= "tsne", features = c("nFeature_RNA", "nCount_RNA"), min.cutoff = NA, max.cutoff = "q99", ncol = 2, order=T)
+
+```
+
+
+```{r warning=FALSE}
+
+apply(as.data.frame(seurat_obj@reductions$pca@cell.embeddings), 2, function(x) cor.test(x, seurat_obj$nCount_RNA, method="spearman")$estimate)
+
+```
+
+##Percent mitochondrial reads
+
+```{r fig.width=7}
+
+FeaturePlot(seurat_obj, reduction= "tsne", features = c("percent_mito"), min.cutoff = NA, max.cutoff = "q99", order=T)
+
+```
+
+```{r warning=FALSE}
+
+apply(as.data.frame(seurat_obj@reductions$pca@cell.embeddings), 2, function(x) cor.test(x, seurat_obj$percent_mito, method="spearman")$estimate)
+
+```
+
+##Batch donor effects
+
+```{r message=FALSE, fig.width=7}
+
+DimPlot(seurat_obj, reduction= "tsne", min.cutoff = NA, max.cutoff = "q99", order=T)
+
+```
+
+##Cell type markers
+
+```{r fig.width=12, fig.height=9}
+
+FeaturePlot(seurat_obj, reduction= "tsne", features = c("CD3E", "CD19", "NCAM1", "FCGR3A", "CD14", "CD1C", "THY1", "PECAM1"), min.cutoff = NA, max.cutoff = "q99", ncol = 3, order=T)
+
+```
+
+
+##Integration
+
+```{r, eval = FALSE}
+
+# Install Harmony (if needed)
+library(devtools)
+install_github("immunogenomics/harmony")
+
+```
+
+
+```{r message=FALSE, warning=FALSE, error=FALSE, results='hide'}
+# Load Harmony package and set seed
+library(harmony)
+set.seed(42) 
+
+# Run Harmony
+seurat_obj <- RunHarmony(seurat_obj, group.by.vars = "orig.ident", assay.use = "SCT")
+
+```
+
+```{r message=FALSE, fig.width=7}
+
+seurat_obj <- RunTSNE(seurat_obj, dims = 1:25, reduction = "harmony")
+DimPlot(seurat_obj, reduction= "tsne", min.cutoff = NA, max.cutoff = "q99", order=T)
+
+```
+
+```{r fig.width=8}
+
+tsne1 <- as.data.frame(seurat_obj@reductions$tsne@cell.embeddings)
+tsne1$orig.ident <- seurat_obj@meta.data$orig.ident
+ggplot(tsne1, aes(tSNE_1, tSNE_2, color=orig.ident)) +
+	geom_point(data = transform(tsne1, orig.ident=NULL), colour = "grey85", size=0.5) +
+	geom_point(size=0.5) + theme_bw() + guides(colour = FALSE) + facet_wrap(~orig.ident)
+
+```
+
+##verification of corresponding to major expected cells
+
+
+```{r fig.width=12, fig.height=9}
+
+FeaturePlot(seurat_obj, reduction= "tsne", features = c("CD3E", "CD19", "NCAM1", "FCGR3A", "CD14", "CD1C", "THY1", "PECAM1"), min.cutoff = NA, max.cutoff = "q99", ncol = 3, order=T)
+
+```
+
+
+##Cluster delination
+
+```{r message=FALSE, warning=FALSE, fig.width=6, fig.height=5}
+
+seurat_obj <- FindNeighbors(seurat_obj, dims = 1:25, reduction = "harmony")
+seurat_obj <- FindClusters(seurat_obj, resolution = 0.6)
+DimPlot(seurat_obj, reduction = "tsne", label = T)
+
+```
+
+
+##add the details to metadata
+
+```{r message=FALSE}
+
+head(seurat_obj@meta.data)
+
+```
+
+##Cell type identification
+
+```{r fig.width=12, fig.height=9}
+
+FeaturePlot(seurat_obj, reduction= "tsne", features = c("PTPRC", "CD3E", "CD4", "CD8B", "IL7R", "NCAM1", "NKG7", "GNLY", "FCGR3A"), min.cutoff = NA, max.cutoff = "q99", ncol = 3, order=T)
+
+```
+
+
+##Cluster delination
+
+```{r fig.width=6}
+
+DimPlot(seurat_obj, reduction = "tsne", label = T)
+
+```
+
+##Cluster DE
+
+```{r fig.width=8}
+
+tsne1 <- as.data.frame(seurat_obj@reductions$tsne@cell.embeddings)
+tsne1$orig.ident <- seurat_obj@meta.data$orig.ident
+ggplot(tsne1, aes(tSNE_1, tSNE_2, color=orig.ident)) +
+	geom_point(data = transform(tsne1, orig.ident=NULL), colour = "grey85", size=0.5) +
+	geom_point(size=0.5) +
+	theme_bw() +
+	guides(colour = FALSE) +
+	facet_wrap(~orig.ident)
+
+```
+
+
+
+
+
+
+
