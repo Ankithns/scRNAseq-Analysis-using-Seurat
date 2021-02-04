@@ -18,7 +18,7 @@ library(tidyverse)
 dir <- ''
 
 ## data directory
-dir.data <- '/hdd_scratch1/sam67253/cell_ranger-pipeline/data/'
+dir.data <- '/hdd_scratch1/sn829442/cell_ranger-pipeline/data/'
 
 ```
 
